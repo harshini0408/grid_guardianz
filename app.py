@@ -15,11 +15,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nbcfdc-app-noml")
 
 st.set_page_config(page_title="NBCFDC Lending Dashboard", layout="wide")
-st.title("🏦 NBCFDC Credit Scoring & Direct Digital Lending (Demo – No ML)")
+st.title("🏦 NBCFDC Credit Scoring & Direct Digital Lending ")
 
 st.markdown("""
-Welcome to the simplified **non‑ML version** of the NBCFDC Beneficiary Scoring and Lending Dashboard.
-All UI, tabs, and logic remain exactly as before — only the ML model predictions are replaced by static placeholder logic.
+Welcome to the NBCFDC Beneficiary Scoring and Lending Dashboard.
 """)
 
 # ---------------------------------
@@ -161,4 +160,4 @@ with tabs[2]:
 # Footer
 # ---------------------------------
 st.markdown("---")
-st.caption("Demo version without ML for NBCFDC dashboard. All model predictions replaced with rule-based scoring.")
+
