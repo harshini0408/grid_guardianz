@@ -1,160 +1,41 @@
-# app.py - NBCFDC Super Dashboard (corrected & robust model-download)
-import os
-import sys
-import time
-import logging
-
+# app.py - NBCFDC Super Dashboard (corrected)
 import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-
 import plotly.express as px
 import plotly.graph_objects as go
-
 import shap
 import matplotlib.pyplot as plt
+import os
+import os
+import gdown
 
-# optional download libs
-try:
-    import gdown
-except Exception:
-    gdown = None
-
-try:
-    import requests
-except Exception:
-    requests = None
-
-# ------------------------------
-# Logging (helps debugging on Render)
-# ------------------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("nbcfdc-app")
-
-# ------------------------------
-# Helper: Download model from Google Drive or HTTP URL
-# - Use environment variable file IDs for Google Drive: MODEL_<X>_GDRIVE_ID
-# - Or use direct URL env var: MODEL_<X>_URL
-# Example Render env vars:
-#   MODEL_REG_GDRIVE_ID  -> file id (not URL)
-#   MODEL_CLF_GDRIVE_ID
-#   MODEL_SCALER_GDRIVE_ID
-#   MODEL_ENC_GDRIVE_ID
-# OR:
-#   MODEL_REG_URL  -> https://...
-# ------------------------------
-def download_from_gdrive(file_id: str, dest: str) -> bool:
+def gd_download_if_missing(env_var_name, dest_filename):
+    file_id = os.environ.get(env_var_name)
     if not file_id:
-        logger.info("No file id provided for %s", dest)
+        print(f"{env_var_name} not set — skipping {dest_filename}")
         return False
-    if os.path.exists(dest):
-        logger.info("%s already present, skipping download.", dest)
+    if os.path.exists(dest_filename):
+        print(f"{dest_filename} already exists — skipping download.")
         return True
-    if gdown is None:
-        logger.warning("gdown not available in environment. Install 'gdown' or provide direct URL.")
-        return False
-    url = f"https://drive.google.com/uc?id={file_id}"
-    logger.info("Attempting to download %s from Google Drive id %s", dest, file_id)
-    try:
-        gdown.download(url, dest, quiet=False)
-        ok = os.path.exists(dest)
-        if ok:
-            logger.info("Downloaded %s successfully.", dest)
-        else:
-            logger.warning("gdown did not create %s (download failed).", dest)
-        return ok
-    except Exception as e:
-        logger.exception("gdown download exception for %s: %s", dest, e)
-        return False
+    url = f"https://drive.google.com/uc?id={1AbCdEfGhIJKlmNoPQrsTuVWxyz
+}"
+    print(f"Downloading {dest_filename} from Google Drive...")
+    gdown.download(url, dest_filename, quiet=False)
+    return os.path.exists(dest_filename)
 
-def download_from_url(url: str, dest: str) -> bool:
-    if not url:
-        logger.info("No URL provided for %s", dest)
-        return False
-    if os.path.exists(dest):
-        logger.info("%s already present, skipping download.", dest)
-        return True
-    if requests is None:
-        logger.warning("requests not available in environment. Install 'requests' or provide gdrive id.")
-        return False
-    logger.info("Attempting to download %s from %s", dest, url)
-    try:
-        with requests.get(url, stream=True, timeout=120) as r:
-            r.raise_for_status()
-            with open(dest, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-        ok = os.path.exists(dest)
-        if ok:
-            logger.info("Downloaded %s successfully via HTTP.", dest)
-        else:
-            logger.warning("HTTP download did not create %s (download failed).", dest)
-        return ok
-    except Exception as e:
-        logger.exception("HTTP download exception for %s: %s", dest, e)
-        return False
-
-def try_download_model(name: str, dest: str) -> bool:
-    """
-    Attempts multiple strategies:
-    1) Google Drive file id from env var MODEL_<NAME>_GDRIVE_ID
-    2) Direct URL from env var MODEL_<NAME>_URL
-    Returns True if file exists (either preexisting or downloaded)
-    """
-    # if file already exists locally, done
-    if os.path.exists(dest):
-        logger.info("%s already exists locally.", dest)
-        return True
-
-    # check GDrive file id environment variable
-    env_id = os.environ.get(f"MODEL_{name.upper()}_GDRIVE_ID")
-    if env_id:
-        ok = download_from_gdrive(env_id, dest)
-        if ok:
-            return True
-
-    # check direct URL environment variable
-    env_url = os.environ.get(f"MODEL_{name.upper()}_URL")
-    if env_url:
-        ok = download_from_url(env_url, dest)
-        if ok:
-            return True
-
-    logger.warning("No model source found for %s (looked for MODEL_%s_GDRIVE_ID and MODEL_%s_URL).", dest, name.upper(), name.upper())
-    return False
-
-# ------------------------------
-# Try to download all required model artifacts before importing them
-# This makes the app suitable for Render where models are not in git.
-# ------------------------------
-# Note: make sure to set the corresponding env vars on Render or on your local test.
-# Example:
-#   MODEL_REG_GDRIVE_ID=1AbCd... (file id)
-#   or MODEL_REG_URL=https://...
-# ------------------------------
-artifacts = {
-    "reg": "regression_model.pkl",
-    "clf": "classification_model.pkl",
-    "scaler": "scaler.pkl",
-    "enc": "encoders.pkl",
-}
-
-# Try downloads (best-effort). If downloads not provided the code will later fail at model load and show helpful errors.
-for key, fname in artifacts.items():
-    try:
-        ok = try_download_model(key, fname)
-        if not ok:
-            logger.info("Model %s not available locally or via env vars.", fname)
-    except Exception as e:
-        logger.exception("Error while attempting to obtain %s: %s", fname, e)
+gd_download_if_missing("MODEL_REG_GDRIVE_ID", "regression_model.pkl")
+gd_download_if_missing("MODEL_CLF_GDRIVE_ID", "classification_model.pkl")
+gd_download_if_missing("MODEL_SCALER_GDRIVE_ID", "scaler.pkl")
+gd_download_if_missing("MODEL_ENC_GDRIVE_ID", "encoders.pkl")
 
 # ------------------------------
 # Page config
 # ------------------------------
 st.set_page_config(page_title="NBCFDC Credit Scoring (Super)", layout="wide", initial_sidebar_state="auto")
 st.title("🏦 NBCFDC Credit Scoring & Direct Digital Lending (Super)")
+
 st.markdown(
     "Multi-role demo: *Beneficiary* | *Loan Officer* | *Admin* — "
     "Includes single/batch prediction, SHAP explainability (bar + waterfall fallback), and auto-decision suggestions."
@@ -165,27 +46,17 @@ st.markdown(
 # ------------------------------
 @st.cache_resource
 def load_artifacts():
-    # attempt to load models - raise descriptive errors if missing
-    missing = []
-    for f in artifacts.values():
-        if not os.path.exists(f):
-            missing.append(f)
-    if missing:
-        raise FileNotFoundError(f"Required model artifact(s) not found: {missing}. "
-                                "Set appropriate MODEL_* env vars (GDrive ID or URL) or upload model files.")
-    reg = joblib.load(artifacts["reg"])
-    clf = joblib.load(artifacts["clf"])
-    scaler = joblib.load(artifacts["scaler"])
-    encoders = joblib.load(artifacts["enc"])  # expected dict {col: LabelEncoder} or similar
+    reg = joblib.load("regression_model.pkl")
+    clf = joblib.load("classification_model.pkl")
+    scaler = joblib.load("scaler.pkl")
+    encoders = joblib.load("encoders.pkl")  # expected dict {col: LabelEncoder}
     return reg, clf, scaler, encoders
 
 try:
     reg_model, clf_model, scaler, encoders = load_artifacts()
-    st.success("Model artifacts loaded.")
 except Exception as e:
-    st.error("Error loading model artifacts. See app logs for details.")
+    st.error("Error loading model artifacts. Make sure regression_model.pkl, classification_model.pkl, scaler.pkl and encoders.pkl exist in this folder.")
     st.exception(e)
-    # stop further execution so user sees the error and can set env vars / upload models
     st.stop()
 
 # ------------------------------
@@ -204,12 +75,12 @@ FEATURE_ORDER = [
 def safe_encode_column(series, le):
     """Encode a pandas Series with a saved LabelEncoder le. Unseen -> index 0 fallback."""
     out = []
-    classes = list(le.classes_) if hasattr(le, "classes_") else []
+    classes = list(le.classes_)
     for v in series.astype(str).tolist():
         if v in classes:
             out.append(int(np.where(le.classes_ == v)[0][0]))
         else:
-            # fallback to 0 to avoid transform error
+            # fallback to the most frequent/first class index (0) to avoid transform error
             out.append(0)
     return out
 
@@ -230,16 +101,11 @@ def preprocess_df(df):
             else:
                 X[c] = "Unknown"
 
-    # Encode categorical columns using saved encoders (safe)
+    # Encode categorical columns using saved encoders
     for col, le in encoders.items():
         if col in X.columns:
-            try:
-                encoded = safe_encode_column(X[col], le)
-                X[col] = encoded
-            except Exception as e:
-                logger.exception("Failed to encode column %s: %s", col, e)
-                # fallback: fill with zeros
-                X[col] = 0
+            encoded = safe_encode_column(X[col], le)
+            X[col] = encoded
 
     # Yes/No -> 1/0 for specific columns if still strings
     for bcol in ["Repeat_Borrower", "Utility_Bill_Regular"]:
@@ -247,11 +113,7 @@ def preprocess_df(df):
             X[bcol] = X[bcol].map({'Yes':1, 'No':0}).fillna(0).astype(int)
 
     # Keep only FEATURE_ORDER and cast to float
-    try:
-        X_final = X[FEATURE_ORDER].astype(float)
-    except Exception as e:
-        logger.exception("Casting to float failed for X[FEATURE_ORDER]. Sample head:\n%s", X.head())
-        raise
+    X_final = X[FEATURE_ORDER].astype(float)
 
     # Scale and return
     X_scaled = scaler.transform(X_final)
@@ -300,6 +162,8 @@ def shap_bar_plot(shap_values, feature_names, max_display=10):
 def shap_waterfall_legacy_plot(explainer, shap_values, feature_names):
     # Attempt legacy waterfall; if fails, raise exception
     try:
+        # shap's internal waterfall function (may differ by version)
+        # Many shap versions provide this; if not, this will raise.
         shap.plots._waterfall.waterfall_legacy(explainer.expected_value, shap_values.values[0],
                                               feature_names=feature_names, show=False)
         fig = plt.gcf()
